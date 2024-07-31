@@ -9,6 +9,14 @@
 #include <openssl/evp.h>
 #include<cstring>
 #include <sstream>
+#include<cmath>
+
+int parseFileName(std::string file, std::string desiredextention){
+    size_t ext = file.find(desiredextention);
+    if (ext == std::string::npos)
+        return (-1);
+    return (0);
+}
 
 class HOTP{
     private:
@@ -25,53 +33,68 @@ class HOTP{
                                         data_len, 
                                         NULL,
                                         NULL);
-            return resault;
-        }
-        HOTP(){
-            std::cout << "Default HOTP Constructor called" << std::endl;
-        }
-        void storingKey(std::string filename){
-            std::ifstream file(filename);
-            if (file.is_open()){
-                std::getline(file, this->key);
-                if (this->key.length() < 64){
-                    std::cout << "key lenght must contain at least 64 characters" << std::endl;
-                    std::exit(1);
-                }
-                else{
-                    unsigned char* res = ft_Hmac();
-                    for (int i = 0; i < 20; i++) {
-                        printf("%02x\n", res[i]);
-                    }
-                    std::ofstream f2;
-                    f2.open("ft_otp.key", std::ios::out | std::ios::binary);
-                    if (f2.is_open() == false){
-                        std::cout << "file not opened" << std::endl;
-                        exit(1);
-                    }
-                    f2.write(reinterpret_cast<const char *>(res), 20);
-                    f2.close();
-                }
-            }
+            if (resault)
+                return resault;
             else{
-                std::cout << "file name not corrext" << std::endl;
+                std::cout << "error in hashing function" << std::endl;
                 exit(0);
             }
         }
+        HOTP(){}
 
-        void getHotp(){
+        void StoreHashedKey(){
+            unsigned char *hash = ft_Hmac();
+            std::ofstream f2;
+            f2.open("ft_otp.key", std::ios::out | std::ios::binary);
+            if (f2.is_open() == false){
+                std::cout << "file not opened" << std::endl;
+                exit(1);
+            }
+            f2.write(reinterpret_cast<const char *>(hash), 20);
+            f2.close();
+            std::cout << "Key was successfully saved in ft_otp.key." << std::endl;
+        }
+
+        void StoreKey(std::string filename){
+            if (parseFileName(filename, ".hex") < 0){
+                std::cout << "file extention must be .hex format !" << std::endl;
+                exit(0);
+            }
+            std::ifstream file(filename, std::ios::in);
+            if (file.is_open()){
+                std::getline(file, this->key);
+                file.close();
+                if (this->key.length() < 64){
+                    std::cout << "error: key must be 64 hexadecimal characters." << std::endl;
+                    std::exit(1);
+                }
+                this->StoreHashedKey();
+            }
+            else{
+                std::cout << "file name not corret" << std::endl;
+                exit(0);
+            }
+            file.close();
+        }
+
+        void GetHotp(std::string file){
+            if (parseFileName(file, ".key")){
+                std::cout << "file extention must be .key format !" << std::endl;
+                exit(0);
+            }
             std::ifstream f;
-            f.open("ft_otp.key", std::ios::in | std::ios::binary);
+            f.open(file, std::ios::in | std::ios::binary);
             if (f.is_open() == false){
-            std::cout << "file not opened" << std::endl;
+                std::cout << "file not opened" << std::endl;
                 exit(1);
             }
             unsigned char res[20];
             f.read(reinterpret_cast<char *>(res), 20);
             f.close();
-            for (int i = 0; i < 20; i++) {
-                printf("%02x\n", res[i]);
-            }
+            int offset = res[19] & 0xf;
+            int bin_code = ((res[offset] & 0x7f) << 24 | (res[offset + 1] & 0xff) << 16 | (res[offset + 2] & 0xff) << 8 | (res[offset + 3] & 0xff));
+            int otp = bin_code % 1000000;
+            printf("%d\n", otp);
         }
 
         std::string getKey() const{
@@ -82,21 +105,17 @@ class HOTP{
             return this->hash;
         }
 
-        ~HOTP(){
-            std::cout << "Default HOTP Destructor called" << std::endl;
-        }
+        ~HOTP(){}
 };
 
 int main(int argc, char **argv){
     HOTP hotp;
     if (argc == 3){
-        if (strcmp(argv[1], "-g") == 0){
-            hotp.storingKey(argv[2]);
+        if (strcmp(argv[1], "-g") == 0 and argv[2]){
+            hotp.StoreKey(argv[2]);
         }
-    }
-    else if (argc == 2){
         if (strcmp(argv[1], "-k") == 0){
-            hotp.getHotp();
+            hotp.GetHotp(argv[2]);
         }
     }
     else{
