@@ -74,12 +74,12 @@ class HOTP{
             std::cout << "encrypted key: " << encryptedKey << std::endl;
 
             std::ofstream f2;
-            f2.open("ft_otp.key", std::ios::out | std::ios::binary);
+            f2.open("ft_otp.key", std::ios::out);
             if (f2.is_open() == false){
                 std::cout << "file not opened" << std::endl;
                 exit(1);
             }
-            f2.write(reinterpret_cast<const char *>(encryptedKey.c_str()), 20);
+            f2.write(encryptedKey.c_str(), encryptedKey.size());
             f2.close();
             std::cout << "Key was successfully saved in ft_otp.key." << std::endl;
         }
@@ -107,19 +107,27 @@ class HOTP{
         }
 
         void GetHotp(std::string file){
-            // std::string decryptedKey = xor_decrypt(encryptedKey, secretKey);
             unsigned char *hash = hmac();
             if (parseFileName(file, ".key")){
                 std::cout << "file extention must be .key format !" << std::endl;
                 exit(0);
             }
             std::ifstream f;
-            f.open(file, std::ios::in | std::ios::binary);
+            f.open(file, std::ios::in);
             if (f.is_open() == false){
                 std::cout << "file not opened" << std::endl;
                 exit(1);
             }
+            f.seekg(0, std::ios::end);
+            size_t fileSize = f.tellg();
+            f.seekg(0, std::ios::beg);
+
+            // Read the entire file content into a string
+            std::string encrypted(fileSize, '\0');
+            f.read(&encrypted[0], fileSize);
             f.close();
+            std::string decryptedKey = xor_decrypt(encrypted, this->secretKey);
+            std::cout << "decrypted data : " << decryptedKey << std::endl;
             int offset = hash[19] & 0xf;
             int bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
             int otp = bin_code % 1000000;
