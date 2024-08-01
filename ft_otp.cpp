@@ -11,6 +11,21 @@
 #include <sstream>
 #include<cmath>
 
+std::string xor_encrypt(const std::string &data, const char *key) {
+    std::string encrypted(data);
+
+    std::string encrypted_data(encrypted.size(), '\0');
+    unsigned char uchar_key = static_cast<unsigned char>(*key);
+    for (size_t i = 0; i < encrypted.size(); ++i) {
+        encrypted_data[i] = static_cast<unsigned char>(encrypted[i]) ^ uchar_key;
+    }
+    return encrypted_data;
+}
+
+std::string xor_decrypt(const std::string &data, const char *key) {
+    return xor_encrypt(data, key);
+}
+
 int parseFileName(std::string file, std::string desiredextention){
     size_t ext = file.find(desiredextention);
     if (ext == std::string::npos)
@@ -20,10 +35,15 @@ int parseFileName(std::string file, std::string desiredextention){
 
 class HOTP{
     private:
+        char secretKey[16];
         std::string key;
         std::string hash;
     public:
-        unsigned char *ft_Hmac (){
+
+        void EncryptKey(){
+
+        }
+        unsigned char *hmac (){
             const char *seckey = "SUPER SECRET KEY";
             const int seckey_len = std::strlen(seckey);
             const char *data = this->key.c_str();
@@ -40,17 +60,26 @@ class HOTP{
                 exit(0);
             }
         }
-        HOTP(){}
+
+        HOTP(){
+            std::string tempKey = "Super Secret key";
+            strncpy(this->secretKey, tempKey.c_str(), sizeof(this->secretKey) - 1);
+            secretKey[sizeof(secretKey) - 1] = '\0';
+        }
 
         void StoreHashedKey(){
-            unsigned char *hash = ft_Hmac();
+            std::string encryptedKey = xor_encrypt(key, this->secretKey);
+
+            std::cout << "Original key: " << key << std::endl;
+            std::cout << "encrypted key: " << encryptedKey << std::endl;
+
             std::ofstream f2;
             f2.open("ft_otp.key", std::ios::out | std::ios::binary);
             if (f2.is_open() == false){
                 std::cout << "file not opened" << std::endl;
                 exit(1);
             }
-            f2.write(reinterpret_cast<const char *>(hash), 20);
+            f2.write(reinterpret_cast<const char *>(encryptedKey.c_str()), 20);
             f2.close();
             std::cout << "Key was successfully saved in ft_otp.key." << std::endl;
         }
@@ -78,6 +107,8 @@ class HOTP{
         }
 
         void GetHotp(std::string file){
+            // std::string decryptedKey = xor_decrypt(encryptedKey, secretKey);
+            unsigned char *hash = hmac();
             if (parseFileName(file, ".key")){
                 std::cout << "file extention must be .key format !" << std::endl;
                 exit(0);
@@ -88,11 +119,9 @@ class HOTP{
                 std::cout << "file not opened" << std::endl;
                 exit(1);
             }
-            unsigned char res[20];
-            f.read(reinterpret_cast<char *>(res), 20);
             f.close();
-            int offset = res[19] & 0xf;
-            int bin_code = ((res[offset] & 0x7f) << 24 | (res[offset + 1] & 0xff) << 16 | (res[offset + 2] & 0xff) << 8 | (res[offset + 3] & 0xff));
+            int offset = hash[19] & 0xf;
+            int bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
             int otp = bin_code % 1000000;
             printf("%d\n", otp);
         }
