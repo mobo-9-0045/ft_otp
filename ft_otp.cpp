@@ -7,9 +7,11 @@
 #include <cryptopp/files.h>
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
-#include<cstring>
+#include <cstring>
 #include <sstream>
-#include<cmath>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 
 std::string xor_encrypt(const std::string &data, const char *key) {
     std::string encrypted(data);
@@ -41,7 +43,7 @@ class HOTP{
     private:
         char secretKey[16];
         std::string key;
-        std::string hash;
+        int otp;
     public:
 
         void EncryptKey(){
@@ -70,13 +72,11 @@ class HOTP{
             secretKey[sizeof(secretKey) - 1] = '\0';
         }
 
-        void StoreHashedKey(){
-            std::string encryptedKey = xor_encrypt(key, this->secretKey);
-
-            std::cout << "Original key: " << key << std::endl;
-            std::cout << "encrypted key: " << encryptedKey << std::endl;
-
+        void StoreEncypedKey(){
+            std::string encryptedKey;
             std::ofstream f2;
+
+            encryptedKey = xor_encrypt(key, this->secretKey);
             f2.open("ft_otp.key", std::ios::out);
             if (f2.is_open() == false){
                 std::cout << "file not opened" << std::endl;
@@ -111,17 +111,36 @@ class HOTP{
 
         void StoreKey(std::string filename){
             this->GetHexKey(filename);
-            this->StoreHashedKey();
+            this->StoreEncypedKey();
         }
 
-        void GetHotp(std::string file){
-            unsigned char *hash;
-            size_t fileSize;
-            std::ifstream f;
-            std::string decryptedKey;
+        int GenerateTotpKey(std::string decryptedKey){
             const char *ctime;
             int offset;
             int bin_code;
+            int totp;
+            unsigned char *hash;
+
+            
+            this->GetHexKey("key.hex");
+            if (this->key == decryptedKey){
+                time_t time_interval = time(0) / 60;
+                ctime = ConvertTimeToByte(&time_interval);
+                hash = hmac(ctime, decryptedKey.c_str());
+            }
+            offset = hash[19] & 0xf;
+            bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
+            totp = bin_code % 1000000;
+            std::ostringstream ss;
+            ss << std::setw(6) << std::setfill('0') << totp;
+            std::string totp_str = ss.str();
+            return std::stoi(totp_str);
+        }
+
+        void SetHotp(std::string file){
+            size_t fileSize;
+            std::ifstream f;
+            std::string decryptedKey;
             int otp;
 
             if (parseFileName(file, ".key")){
@@ -140,27 +159,12 @@ class HOTP{
             f.read(&encrypted[0], fileSize);
             f.close();
             decryptedKey = xor_decrypt(encrypted, this->secretKey);
-            std::cout << "decrypted data : " << decryptedKey << std::endl;
-            this->GetHexKey("key.hex");
-            if (this->key == decryptedKey){
-                std::cout << "Authorized" << std::endl;
-            }
-            time_t now = time(0);
-            std::cout << "current time : " << now  << std::endl;
-            ctime = ConvertTimeToByte(&now);
-            hash = hmac(ctime, decryptedKey.c_str());
-            offset = hash[19] & 0xf;
-            bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
-            otp = bin_code % 1000000;
-            printf("%d\n", otp);
+            otp = this->GenerateTotpKey(decryptedKey);
+            this->otp = otp;
         }
 
-        std::string getKey() const{
-            return this->key;
-        }
-
-        std::string getHash() const{
-            return this->hash;
+        int getTotp() const {
+            return this->otp;
         }
 
         ~HOTP(){}
@@ -172,8 +176,13 @@ int main(int argc, char **argv){
         if (strcmp(argv[1], "-g") == 0 and argv[2]){
             hotp.StoreKey(argv[2]);
         }
-        if (strcmp(argv[1], "-k") == 0){
-            hotp.GetHotp(argv[2]);
+        else if (strcmp(argv[1], "-k") == 0){
+            hotp.SetHotp(argv[2]);
+            std::cout << hotp.getTotp() << std::endl;
+        }
+        else{
+            std::cout << "program require [-g -k] option" << std::endl;
+            exit(1);
         }
     }
     else{
