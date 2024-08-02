@@ -33,6 +33,10 @@ int parseFileName(std::string file, std::string desiredextention){
     return (0);
 }
 
+const char *ConvertTimeToByte(time_t *time){
+    return reinterpret_cast<const char *>(time);
+}
+
 class HOTP{
     private:
         char secretKey[16];
@@ -43,14 +47,13 @@ class HOTP{
         void EncryptKey(){
 
         }
-        unsigned char *hmac (){
-            const char *seckey = "SUPER SECRET KEY";
-            const int seckey_len = std::strlen(seckey);
-            const char *data = this->key.c_str();
+        unsigned char *hmac (const char *currenttime, const char * key){
+            size_t seckey_len = std::strlen(key);
+            const char *data = currenttime;
             const int data_len = std::strlen(data);
-            unsigned char *resault = HMAC(EVP_sha1(), seckey, seckey_len, 
+            unsigned char *resault = HMAC(EVP_sha1(), key, seckey_len, 
                                         (unsigned char *)data, 
-                                        data_len, 
+                                        data_len,
                                         NULL,
                                         NULL);
             if (resault)
@@ -84,53 +87,71 @@ class HOTP{
             std::cout << "Key was successfully saved in ft_otp.key." << std::endl;
         }
 
-        void StoreKey(std::string filename){
+        void GetHexKey(std::string filename){
+            std::ifstream file;
+
             if (parseFileName(filename, ".hex") < 0){
                 std::cout << "file extention must be .hex format !" << std::endl;
                 exit(0);
             }
-            std::ifstream file(filename, std::ios::in);
+            file.open(filename, std::ios::in);
             if (file.is_open()){
                 std::getline(file, this->key);
-                file.close();
                 if (this->key.length() < 64){
                     std::cout << "error: key must be 64 hexadecimal characters." << std::endl;
+                    file.close();
                     std::exit(1);
                 }
-                this->StoreHashedKey();
+                file.close();
+                return;
             }
-            else{
-                std::cout << "file name not corret" << std::endl;
-                exit(0);
-            }
-            file.close();
+            std::cout << "file name not corret" << std::endl;
+            exit(0);
+        }
+
+        void StoreKey(std::string filename){
+            this->GetHexKey(filename);
+            this->StoreHashedKey();
         }
 
         void GetHotp(std::string file){
-            unsigned char *hash = hmac();
+            unsigned char *hash;
+            size_t fileSize;
+            std::ifstream f;
+            std::string decryptedKey;
+            const char *ctime;
+            int offset;
+            int bin_code;
+            int otp;
+
             if (parseFileName(file, ".key")){
                 std::cout << "file extention must be .key format !" << std::endl;
                 exit(0);
             }
-            std::ifstream f;
             f.open(file, std::ios::in);
             if (f.is_open() == false){
                 std::cout << "file not opened" << std::endl;
                 exit(1);
             }
             f.seekg(0, std::ios::end);
-            size_t fileSize = f.tellg();
+            fileSize = f.tellg();
             f.seekg(0, std::ios::beg);
-
-            // Read the entire file content into a string
             std::string encrypted(fileSize, '\0');
             f.read(&encrypted[0], fileSize);
             f.close();
-            std::string decryptedKey = xor_decrypt(encrypted, this->secretKey);
+            decryptedKey = xor_decrypt(encrypted, this->secretKey);
             std::cout << "decrypted data : " << decryptedKey << std::endl;
-            int offset = hash[19] & 0xf;
-            int bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
-            int otp = bin_code % 1000000;
+            this->GetHexKey("key.hex");
+            if (this->key == decryptedKey){
+                std::cout << "Authorized" << std::endl;
+            }
+            time_t now = time(0);
+            std::cout << "current time : " << now  << std::endl;
+            ctime = ConvertTimeToByte(&now);
+            hash = hmac(ctime, decryptedKey.c_str());
+            offset = hash[19] & 0xf;
+            bin_code = ((hash[offset] & 0x7f) << 24 | (hash[offset + 1] & 0xff) << 16 | (hash[offset + 2] & 0xff) << 8 | (hash[offset + 3] & 0xff));
+            otp = bin_code % 1000000;
             printf("%d\n", otp);
         }
 
